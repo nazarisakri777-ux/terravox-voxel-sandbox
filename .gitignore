@@ -1,0 +1,16 @@
+# Windows / macOS / Linux junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local temp / test artifacts
+test_*.html
+test_*.js
+node_modules/
+*.log

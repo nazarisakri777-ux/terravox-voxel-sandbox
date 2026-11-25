@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>TERRAVOX — 3D Voxel Sandbox</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="vendor/three.min.js"></script>
+</head>
+<body>
+  <!-- Main 3D WebGL Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Fullscreen Effects -->
+  <div id="damage-overlay"></div>
+  <div id="underwater-overlay"></div>
+  <div id="lava-overlay"></div>
+  <div id="sleep-overlay"></div>
+
+  <!-- Crosshair & Interaction Prompt -->
+  <div id="crosshair-wrap" class="hidden">
+    <svg id="crosshair" viewBox="0 0 18 18">
+      <rect x="8" y="2" width="2" height="14" fill="#ffffff" stroke="#000000" stroke-width="0.6"/>
+      <rect x="2" y="8" width="14" height="2" fill="#ffffff" stroke="#000000" stroke-width="0.6"/>
+    </svg>
+    <div id="interact-prompt"></div>
+  </div>
+
+  <!-- Top-Left Compact World Info Pill -->
+  <div id="top-info-bar" class="hidden">
+    <div class="info-pill">
+      <span id="hud-day-time">Tag 1 • 08:00</span>
+      <span class="sep">|</span>
+      <span id="hud-biome">Grasland</span>
+      <span class="sep">|</span>
+      <span id="hud-mode-badge">Überleben</span>
+    </div>
+  </div>
+
+  <!-- F3 Debug Overlay -->
+  <div id="debug-overlay" class="hidden"></div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container"></div>
+
+  <!-- In-Game HUD (Bottom Center) -->
+  <div id="hud" class="hidden">
+    <div id="held-item-label"></div>
+
+    <div id="status-row">
+      <div class="status-left">
+        <div class="stat-group" id="armor-container"></div>
+        <div class="stat-group" id="hearts-container"></div>
+      </div>
+      <div class="status-right">
+        <div class="stat-group" id="bubbles-container"></div>
+        <div class="stat-group" id="hunger-container"></div>
+      </div>
+    </div>
+
+    <div id="xp-container">
+      <div id="level-number">0</div>
+      <div id="xp-bar-bg">
+        <div id="xp-bar-fill"></div>
+      </div>
+    </div>
+
+    <div id="hotbar">
+      <div id="hotbar-selector"></div>
+      <div class="hotbar-slot" data-slot="0"></div>
+      <div class="hotbar-slot" data-slot="1"></div>
+      <div class="hotbar-slot" data-slot="2"></div>
+      <div class="hotbar-slot" data-slot="3"></div>
+      <div class="hotbar-slot" data-slot="4"></div>
+      <div class="hotbar-slot" data-slot="5"></div>
+      <div class="hotbar-slot" data-slot="6"></div>
+      <div class="hotbar-slot" data-slot="7"></div>
+      <div class="hotbar-slot" data-slot="8"></div>
+    </div>
+  </div>
+
+  <!-- Floating Dragged Item Cursor -->
+  <div id="cursor-item">
+    <canvas width="32" height="32"></canvas>
+    <div class="slot-count"></div>
+  </div>
+
+  <!-- Item Hover Tooltip -->
+  <div id="item-tooltip" class="hidden"></div>
+
+  <!-- =================================================== -->
+  <!-- MAIN MENU / TITLE SCREEN                            -->
+  <!-- =================================================== -->
+  <div class="menu-backdrop" id="main-menu">
+    <div class="title-card">
+      <div class="brand-logo">
+        <div class="brand-badge">3D VOXEL SANDBOX</div>
+        <h1 class="brand-title">TERRAVOX</h1>
+        <p class="brand-sub">Erkunden • Bauen • Überleben • Erschaffen</p>
+      </div>
+
+      <div class="menu-stack" id="menu-home-view">
+        <button class="tv-btn primary large" id="btn-menu-play">▶ Welt laden / Spielen</button>
+        <button class="tv-btn large" id="btn-menu-new">＋ Neue Welt erstellen</button>
+        <button class="tv-btn" id="btn-menu-settings">⚙ Einstellungen & Steuerung</button>
+      </div>
+
+      <!-- Create New World Panel -->
+      <div class="menu-panel hidden" id="menu-create-view">
+        <div class="panel-header">
+          <h2>Neue Welt erstellen</h2>
+          <button class="icon-close" data-back-home>✕</button>
+        </div>
+        <div class="form-grid">
+          <label class="field-label">Weltname</label>
+          <input type="text" id="input-world-name" class="tv-input" value="Meine Welt" maxlength="32">
+
+          <label class="field-label">Welt-Seed (leer = zufällig)</label>
+          <div class="input-row">
+            <input type="text" id="input-world-seed" class="tv-input" placeholder="z.B. 482917 oder Bergdorf">
+            <button class="tv-btn small" id="btn-random-seed" title="Zufälliger Seed">🎲</button>
+          </div>
+
+          <label class="field-label">Spielmodus</label>
+          <div class="mode-toggle-row">
+            <button class="mode-card active" data-gamemode="survival">
+              <div class="mode-title">⚔ Überleben</div>
+              <div class="mode-desc">Abbauen, Craften, Hunger, Leben, Tag/Nacht-Gefahren</div>
+            </button>
+            <button class="mode-card" data-gamemode="creative">
+              <div class="mode-title">✨ Kreativ</div>
+              <div class="mode-desc">Fliegen, alle Blöcke unbegrenzt, sofortiges Bauen</div>
+            </button>
+          </div>
+
+          <label class="field-label">Weltprofil</label>
+          <select id="select-world-preset" class="tv-input">
+            <option value="default">Standard (Kontinente, Dörfer, Höhlen, Gebirge)</option>
+            <option value="amplified">Dramatische Berge (Hohe Gipfel & tiefe Täler)</option>
+            <option value="islands">Archipel & Inseln (Seen, Buchten, Strände)</option>
+          </select>
+        </div>
+        <div class="panel-actions">
+          <button class="tv-btn" data-back-home>Zurück</button>
+          <button class="tv-btn primary" id="btn-create-world-confirm">Welt erschaffen & Starten</button>
+        </div>
+      </div>
+
+      <!-- Saved Worlds List Panel -->
+      <div class="menu-panel hidden" id="menu-worlds-view">
+        <div class="panel-header">
+          <h2>Gespeicherte Welten</h2>
+          <button class="icon-close" data-back-home>✕</button>
+        </div>
+        <div id="worlds-list" class="worlds-list"></div>
+        <div class="panel-actions">
+          <button class="tv-btn" data-back-home>Zurück</button>
+          <button class="tv-btn primary" id="btn-worlds-to-new">＋ Neue Welt</button>
+        </div>
+      </div>
+    </div>
+    <div class="menu-footer">Tipp: Drücke <b>F3</b> im Spiel für Koordinaten & Biome • <b>ESC</b> für Pause</div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- PAUSE MENU                                          -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="pause-menu">
+    <div class="menu-panel compact">
+      <div class="panel-header">
+        <h2>Spiel pausiert</h2>
+      </div>
+      <div id="pause-world-meta" class="pause-meta"></div>
+      <div class="menu-stack">
+        <button class="tv-btn primary" id="btn-resume">▶ Weiterspielen</button>
+        <button class="tv-btn" id="btn-save-world">💾 Welt jetzt speichern</button>
+        <button class="tv-btn" id="btn-pause-settings">⚙ Einstellungen</button>
+        <button class="tv-btn danger" id="btn-quit-menu">🏠 Speichern & Zum Hauptmenü</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- SETTINGS MODAL (Graphics, Audio, Controls)          -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="settings-modal">
+    <div class="menu-panel wide">
+      <div class="panel-header">
+        <h2>Einstellungen</h2>
+        <button class="icon-close" id="btn-close-settings">✕</button>
+      </div>
+
+      <div class="settings-tabs">
+        <button class="tab-btn active" data-tab="graphics">Grafik</button>
+        <button class="tab-btn" data-tab="audio">Audio</button>
+        <button class="tab-btn" data-tab="controls">Steuerung</button>
+      </div>
+
+      <!-- Graphics Tab -->
+      <div class="tab-content" id="tab-graphics">
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Grafik-Qualität</div>
+            <div class="setting-hint">Passt Sichtweite, Schatten & Effekte an</div>
+          </div>
+          <select id="set-quality" class="tv-input small-select">
+            <option value="low">Niedrig (Schnell)</option>
+            <option value="medium">Mittel</option>
+            <option value="high" selected>Hoch (Empfohlen)</option>
+            <option value="ultra">Ultra</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Sichtweite: <span id="val-render-dist">6</span> Chunks</div>
+            <div class="setting-hint">Höhere Werte zeigen weiter entfernte Berge</div>
+          </div>
+          <input type="range" id="set-render-dist" min="3" max="10" step="1" value="6">
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Echtzeit-Schatten</div>
+            <div class="setting-hint">Dynamische Sonnen- und Gebäudeschatten</div>
+          </div>
+          <input type="checkbox" id="set-shadows" class="tv-checkbox" checked>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Ambient Occlusion (AO)</div>
+            <div class="setting-hint">Weiche Kontaktschatten in Ecken & Höhlen</div>
+          </div>
+          <input type="checkbox" id="set-ao" class="tv-checkbox" checked>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Sichtfeld (FOV): <span id="val-fov">75</span>°</div>
+          </div>
+          <input type="range" id="set-fov" min="60" max="100" step="1" value="75">
+        </div>
+      </div>
+
+      <!-- Audio Tab -->
+      <div class="tab-content hidden" id="tab-audio">
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Gesamtlautstärke: <span id="val-master-vol">80</span>%</div>
+          </div>
+          <input type="range" id="set-master-vol" min="0" max="100" step="5" value="80">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Soundeffekte: <span id="val-sfx-vol">85</span>%</div>
+          </div>
+          <input type="range" id="set-sfx-vol" min="0" max="100" step="5" value="85">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Umgebungsmusik: <span id="val-music-vol">45</span>%</div>
+          </div>
+          <input type="range" id="set-music-vol" min="0" max="100" step="5" value="45">
+        </div>
+      </div>
+
+      <!-- Controls Tab -->
+      <div class="tab-content hidden" id="tab-controls">
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Mausempfindlichkeit: <span id="val-sens">1.0</span>x</div>
+          </div>
+          <input type="range" id="set-sens" min="0.3" max="2.5" step="0.1" value="1.0">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-name">Y-Achse umkehren</div>
+          </div>
+          <input type="checkbox" id="set-invert-y" class="tv-checkbox">
+        </div>
+        <div class="controls-reference">
+          <div><b>W / A / S / D</b><span>Bewegen</span></div>
+          <div><b>Leertaste</b><span>Springen / Schwimmen (2x im Kreativ = Fliegen)</span></div>
+          <div><b>Shift</b><span>Schleichen & Kantenschutz (oder Sinken beim Fliegen)</span></div>
+          <div><b>Strg / 2x W</b><span>Sprinten</span></div>
+          <div><b>Linke Maustaste</b><span>Block abbauen / Kreatur angreifen / Bogen spannen</span></div>
+          <div><b>Rechte Maustaste</b><span>Block platzieren / Interagieren / Essen / Hacken</span></div>
+          <div><b>1–9 / Mausrad</b><span>Hotbar-Slot wählen</span></div>
+          <div><b>E</b><span>Inventar & Crafting öffnen / schließen</span></div>
+          <div><b>Q</b><span>Aktiven Gegenstand fallen lassen</span></div>
+          <div><b>F3</b><span>Koordinaten, Biom & FPS anzeigen</span></div>
+          <div><b>ESC</b><span>Pausemenü / Dialog schließen</span></div>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button class="tv-btn primary" id="btn-save-settings">Übernehmen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- INVENTORY & CRAFTING MODAL (Classic Bevelled UI)    -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="inventory-modal">
+    <div class="inv-wrapper">
+      <div class="modal-close-btn" id="inv-close-btn">✕</div>
+
+      <!-- Recipe Book / Creative Catalog Sidebar -->
+      <div class="mc-panel" id="recipe-book-window">
+        <div class="gui-title-row">
+          <span id="sidebar-title">📖 Rezeptbuch</span>
+          <span class="gui-hint" id="sidebar-hint">Klick = Vorschau</span>
+        </div>
+        <input type="text" id="recipe-search" class="mc-search" placeholder="Suchen...">
+        <div id="recipe-list"></div>
+        <div id="recipe-detail-box">
+          <div id="recipe-detail-name">Wähle ein Rezept</div>
+          <div id="recipe-preview-grid"></div>
+          <div id="recipe-requirements"></div>
+          <button class="mc-button" id="recipe-autofill-btn">Im Gitter anordnen</button>
+        </div>
+      </div>
+
+      <!-- Main Inventory Panel -->
+      <div class="mc-panel" id="inventory-window">
+        <div class="gui-title-row">
+          <span class="gui-title" id="crafting-title">Inventar & Herstellung</span>
+          <button class="mc-tab-btn hidden" id="btn-toggle-creative-tab">✨ Kreativ-Katalog</button>
+        </div>
+
+        <!-- Top Area: Armor + 3D Paperdoll + Crafting Grid (or Creative Grid) -->
+        <div id="survival-top-area" class="inv-top-area">
+          <!-- Armor + 3D Character Preview (like Reference 1) -->
+          <div class="character-section" id="character-section">
+            <div class="armor-column">
+              <div class="gui-slot armor-slot" data-slot-type="helmet" title="Helm"></div>
+              <div class="gui-slot armor-slot" data-slot-type="chestplate" title="Brustpanzer"></div>
+              <div class="gui-slot armor-slot" data-slot-type="leggings" title="Hose"></div>
+              <div class="gui-slot armor-slot" data-slot-type="boots" title="Stiefel"></div>
+            </div>
+            <div class="paperdoll-frame">
+              <canvas id="paperdoll-canvas" width="110" height="156"></canvas>
+            </div>
+          </div>
+
+          <!-- Crafting Section -->
+          <div class="crafting-section">
+            <div class="crafting-grid crafting-grid-2x2" id="craft-grid"></div>
+            <div class="craft-arrow">➔</div>
+            <div class="gui-slot output-slot" id="craft-output"></div>
+          </div>
+        </div>
+
+        <!-- Creative Item Catalog (hidden in survival unless creative mode) -->
+        <div id="creative-catalog-area" class="hidden">
+          <div class="creative-grid" id="creative-grid"></div>
+        </div>
+
+        <!-- 27 Main Inventory Slots -->
+        <div class="gui-title">Inventar <span class="gui-subhint">(Shift+Klick: Schnelltransfer • Rechtsklick: 1x / Teilen)</span></div>
+        <div class="inv-grid" id="main-inventory"></div>
+
+        <!-- 9 Hotbar Slots -->
+        <div class="gui-title" style="margin-top:4px;">Schnellleiste</div>
+        <div class="inv-grid" id="hotbar-inventory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- FURNACE MODAL                                       -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="furnace-modal">
+    <div class="inv-wrapper">
+      <div class="modal-close-btn" id="furnace-close-btn">✕</div>
+      <div class="mc-panel" id="furnace-window">
+        <div class="gui-title-row">
+          <span class="gui-title">🔥 Schmelzofen</span>
+          <span class="gui-hint">Erze, Sand, Bruchstein & Fleisch schmelzen</span>
+        </div>
+
+        <div class="furnace-section">
+          <div class="furnace-inputs">
+            <div class="furnace-col">
+              <span class="slot-label">Material</span>
+              <div class="gui-slot" id="furnace-input-slot"></div>
+            </div>
+            <div class="furnace-flame-wrap">
+              <div class="flame-icon"><div class="flame-fill" id="furnace-fuel-bar"></div></div>
+            </div>
+            <div class="furnace-col">
+              <span class="slot-label">Brennstoff</span>
+              <div class="gui-slot" id="furnace-fuel-slot"></div>
+            </div>
+          </div>
+
+          <div class="furnace-progress-wrap">
+            <div class="progress-arrow-bg">
+              <div class="progress-arrow-fill" id="furnace-progress-bar"></div>
+            </div>
+          </div>
+
+          <div class="furnace-col">
+            <span class="slot-label">Ergebnis</span>
+            <div class="gui-slot output-slot" id="furnace-output-slot"></div>
+          </div>
+        </div>
+
+        <div class="gui-title">Inventar</div>
+        <div class="inv-grid" id="furnace-main-inventory"></div>
+        <div class="gui-title" style="margin-top:4px;">Schnellleiste</div>
+        <div class="inv-grid" id="furnace-hotbar-inventory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- CHEST MODAL                                         -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="chest-modal">
+    <div class="inv-wrapper">
+      <div class="modal-close-btn" id="chest-close-btn">✕</div>
+      <div class="mc-panel" id="chest-window">
+        <div class="gui-title-row">
+          <span class="gui-title">📦 Truhe</span>
+          <span class="gui-hint">Shift+Klick zum Verschieben</span>
+        </div>
+
+        <div class="inv-grid" id="chest-slots"></div>
+
+        <div class="gui-title" style="margin-top:6px;">Inventar</div>
+        <div class="inv-grid" id="chest-main-inventory"></div>
+        <div class="gui-title" style="margin-top:4px;">Schnellleiste</div>
+        <div class="inv-grid" id="chest-hotbar-inventory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- VILLAGER TRADE MODAL                                -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="trade-modal">
+    <div class="inv-wrapper">
+      <div class="modal-close-btn" id="trade-close-btn">✕</div>
+      <div class="mc-panel" id="trade-window">
+        <div class="gui-title-row">
+          <span class="gui-title">🧑‍🌾 Dorfbewohner-Handel</span>
+          <span class="gui-hint" id="trader-role-label">Bauer & Händler</span>
+        </div>
+        <div id="trade-offers-list" class="trade-offers-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- DEATH SCREEN                                        -->
+  <!-- =================================================== -->
+  <div class="modal-overlay hidden" id="death-screen">
+    <div class="death-card">
+      <div id="death-title">Du bist gestorben!</div>
+      <div id="death-reason">Deine Reise endete in der Wildnis.</div>
+      <div id="death-score">Erreichtes Level: 0</div>
+      <div class="panel-actions" style="justify-content:center;">
+        <button class="tv-btn primary" id="respawn-btn">Wiederbeleben</button>
+        <button class="tv-btn" id="death-menu-btn">Zum Hauptmenü</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================== -->
+  <!-- MOBILE TOUCH CONTROLS                               -->
+  <!-- =================================================== -->
+  <div id="touch-ui">
+    <div id="joystick-zone"><div id="joystick-knob"></div></div>
+    <div class="touch-btn" id="touch-jump-btn" title="Springen">▲</div>
+    <div class="touch-btn" id="touch-mine-btn" title="Abbauen / Schlagen">⛏</div>
+    <div class="touch-btn" id="touch-place-btn" title="Platzieren / Benutzen">📦</div>
+    <div class="touch-btn" id="touch-sneak-btn" title="Schleichen">▼</div>
+    <div class="touch-btn" id="touch-inv-btn" title="Inventar">🎒</div>
+  </div>
+
+  <!-- Modular Game Engine Scripts -->
+  <script defer src="js/noise.js"></script>
+  <script defer src="js/audio.js"></script>
+  <script defer src="js/blocks.js"></script>
+  <script defer src="js/textures.js"></script>
+  <script defer src="js/worldgen.js"></script>
+  <script defer src="js/lighting.js"></script>
+  <script defer src="js/chunk.js"></script>
+  <script defer src="js/entities.js"></script>
+  <script defer src="js/storage.js"></script>
+  <script defer src="js/inventory.js"></script>
+  <script defer src="js/player.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/main.js"></script>
+</body>
+</html>
